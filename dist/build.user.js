@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.4
+// @version 3.18-fork.5
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -7733,30 +7733,47 @@ if (needZipBlob) {
                         });
                     }
                 } else {
-                    if (postSettings.generateLog || postSettings.generateLinks) {
+                    // Disable Zip path: skip the zip blob entirely and write
+                    // plain .txt files directly. One per output type, flat
+                    // filename (no nested per-post folder) so a "Skip Download
+                    // + Generate Links + Disable Zip" run produces one
+                    // <title>-#<n>-links.txt per post — nothing else.
+                    const saveText = async (text, filename) => {
+                        const textBlob = new Blob([text], { type: 'text/plain;charset=utf-8' });
                         if (isFF) {
-                            saveAs(blob, generatedZipName);
-                        } else {
-                            await new Promise(resolve => {
-                                const url = URL.createObjectURL(blob);
-                                GM_download({
-                                    url,
-                                    name: `${title}/#${postNumber}/generated.zip`,
-                                    onload: () => {
-                                        try { URL.revokeObjectURL(url); } catch (e) {}
-                                        blob = null;
-                                        resolve();
-                                    },
-                                    onerror: response => {
-                                        try { URL.revokeObjectURL(url); } catch (e) {}
-                                        console.log(`Error writing generated.zip to disk. There may be more details below.`);
-                                        console.log(response);
-                                        blob = null;
-                                        resolve();
-                                    },
-                                });
-                            });
+                            saveAs(textBlob, filename);
+                            return;
                         }
+                        await new Promise(resolve => {
+                            const url = URL.createObjectURL(textBlob);
+                            GM_download({
+                                url,
+                                name: filename,
+                                onload: () => { try { URL.revokeObjectURL(url); } catch (e) {} resolve(); },
+                                onerror: response => {
+                                    try { URL.revokeObjectURL(url); } catch (e) {}
+                                    console.log(`Error writing ${filename} to disk:`);
+                                    console.log(response);
+                                    try { saveAs(textBlob, filename); } catch (e) {}
+                                    resolve();
+                                },
+                            });
+                        });
+                    };
+
+                    if (postSettings.generateLog) {
+                        const logText = logs
+                            .filter(l => l.postId === postId)
+                            .map(l => l.message)
+                            .join('\n');
+                        await saveText(logText, `${title}/${title} #${postNumber} log.txt`);
+                    }
+                    if (postSettings.generateLinks) {
+                        const linksText = resolved
+                            .filter(r => r.url)
+                            .map(r => r.url)
+                            .join('\n');
+                        await saveText(linksText, `${title}/${title} #${postNumber} links.txt`);
                     }
                 }
             }
