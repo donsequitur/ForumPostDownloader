@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.3
+// @version 3.18-fork.4
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -5523,6 +5523,28 @@ try {
 
 log.post.info(postId, '::Url resolution started::', postNumber);
 
+    // Skip-resolvers fast path: emit each captured host resource verbatim
+    // instead of walking it through the per-host resolver chain (which fetches
+    // album pages, follows redirects, etc. — slow and prone to DataDome/CF
+    // throttling on bunkr in particular). The downstream Generate Links /
+    // Generate Log writers consume the same `resolved` shape either way.
+    // Pair with Skip Download + Generate Links for the cyberdrop-dl handoff
+    // workflow: cyberdrop-dl resolves albums itself, no need to do it twice.
+    if (postSettings.skipResolvers) {
+        for (const host of enabledHosts.filter(host => host.resources.length)) {
+            for (const resource of host.resources) {
+                resolved.push({
+                    url: resource,
+                    host,
+                    original: resource,
+                    folderName: null,
+                    forceUnzipped: false,
+                    forceDirect: false,
+                });
+            }
+        }
+        log.post.info(postId, '::Resolvers skipped (raw URLs emitted)::', postNumber);
+    } else
     for (const host of enabledHosts.filter(host => host.resources.length)) {
         const resources = host.resources;
 
@@ -7963,7 +7985,9 @@ const selectedPosts = [];
                 generateLog: false,
                 skipDuplicates: false,
                 skipDownload: false,
-                verifyBunkrLinks: false,                output: [],
+                verifyBunkrLinks: false,
+                skipResolvers: false,
+                output: [],
             };
 
             const parsedPost = parsers.thread.parsePost(post);
@@ -8073,6 +8097,7 @@ const selectedPosts = [];
                 const pageSkipDuplicates = document.querySelector('#config-page-skip-duplicates')?.checked ?? false;
                 const pageVerifyBunkr    = document.querySelector('#config-page-verify-bunkr-links')?.checked ?? false;
                 const pageDisableZip     = document.querySelector('#config-page-disable-zip')?.checked ?? false;
+                const pageSkipResolvers  = document.querySelector('#config-page-skip-resolvers')?.checked ?? false;
 
                 // collect host names the user wants disabled across all posts.
                 const disabledHostNames = new Set(
@@ -8083,7 +8108,7 @@ const selectedPosts = [];
                     .filter(s => s.enabled)
                     .forEach(s => {
                     // apply page-level overrides to this post's settings.
-                    if (pageSkipDownload || pageSkipDuplicates || pageVerifyBunkr || pageDisableZip) {
+                    if (pageSkipDownload || pageSkipDuplicates || pageVerifyBunkr || pageDisableZip || pageSkipResolvers) {
                         const ps = s.post.getSettingsCB();
                         if (pageSkipDownload) {
                             ps.skipDownload   = true;
@@ -8098,6 +8123,9 @@ const selectedPosts = [];
                         }
                         if (pageDisableZip) {
                             ps.zipped = false;
+                        }
+                        if (pageSkipResolvers) {
+                            ps.skipResolvers = true;
                         }
                     }
                     // disable any host the page filter excluded. Mutates the
@@ -8153,6 +8181,7 @@ const selectedPosts = [];
             overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates',   'Skip Duplicates',                     false);
             overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links','Verify Bunkr Links',                  false);
             overrideHtml    += ui.forms.createCheckbox('config-page-disable-zip',       'Disable Zip (plain links.txt output)', false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-skip-resolvers',    'Skip Resolvers (emit album/raw URLs)', false);
 
             // global host filter — one "Disable <Host>" checkbox per
             // unique host name detected on the page. Same inverse-toggle
