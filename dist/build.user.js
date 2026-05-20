@@ -1,12 +1,13 @@
 // noinspection SpellCheckingInspection,JSUnresolvedVariable,JSUnresolvedFunction,TypeScriptUMDGlobal,JSUnusedGlobalSymbols
 // ==UserScript==
-// @name XenForoPostDownloader
-// @namespace https://github.com/SkyCloudDev
+// @name XenForoPostDownloader (donsequitur fork)
+// @namespace https://github.com/donsequitur
 // @author SkyCloudDev
-// @description Downloads images and videos from posts
-// @version 3.18
-// @updateURL https://github.com/SkyCloudDev/ForumPostDownloader/raw/main/dist/build.user.js
-// @downloadURL https://github.com/SkyCloudDev/ForumPostDownloader/raw/main/dist/build.user.js
+// @author donsequitur (fork)
+// @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
+// @version 3.18-fork.1
+// @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
+// @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
 // @license WTFPL; http://www.wtfpl.net/txt/copying/
 // @match https://simpcity.cr/threads/*
@@ -8056,9 +8057,31 @@ const selectedPosts = [];
             btnDownloadPage.addEventListener('click', e => {
                 e.preventDefault();
 
+                // FORK: read page-level override checkboxes. When set, these
+                // mutate each post's settings closure before download fires.
+                // Mirrors the per-post Skip-Download toggle's side effects.
+                const pageSkipDownload   = document.querySelector('#config-page-skip-download')?.checked ?? false;
+                const pageSkipDuplicates = document.querySelector('#config-page-skip-duplicates')?.checked ?? false;
+                const pageVerifyBunkr    = document.querySelector('#config-page-verify-bunkr-links')?.checked ?? false;
+
                 selectedPosts
                     .filter(s => s.enabled)
                     .forEach(s => {
+                    // FORK: apply page-level overrides to this post's settings.
+                    if (pageSkipDownload || pageSkipDuplicates || pageVerifyBunkr) {
+                        const ps = s.post.getSettingsCB();
+                        if (pageSkipDownload) {
+                            ps.skipDownload   = true;
+                            ps.generateLinks  = true;
+                            ps.flatten        = false;
+                            ps.skipDuplicates = false;
+                        } else if (pageSkipDuplicates) {
+                            ps.skipDuplicates = true;
+                        }
+                        if (pageVerifyBunkr) {
+                            ps.verifyBunkrLinks = true;
+                        }
+                    }
                     downloadPost(
                         s.post.parsedPost,
                         s.post.parsedHosts,
@@ -8093,7 +8116,13 @@ const selectedPosts = [];
                 html += ui.forms.createCheckbox(`config-download-post-${postId}`, `Post #${postNumber} ${summary}`, false);
             });
 
-            html = `${ui.forms.createRow(ui.forms.createLabel('Post Selection'))} ${html}`;
+            // FORK: page-level override section. These checkboxes get read by
+            // the Download Page click handler above and applied to every
+            // selected post's settings.
+            let overrideHtml = ui.forms.createCheckbox('config-page-skip-download',   'Skip Download (Generate Links only)', false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates', 'Skip Duplicates',                     false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links', 'Verify Bunkr Links',               false);
+            html = `${ui.forms.createRow(ui.forms.createLabel('Override (applies to all selected)'))} ${overrideHtml} ${ui.forms.createRow(ui.forms.createLabel('Post Selection'))} ${html}`;
             ui.tooltip(btnDownloadPage, ui.forms.config.page.createForm(color, html), {
                 placement: 'bottom',
                 interactive: true,
