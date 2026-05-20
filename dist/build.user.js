@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.2
+// @version 3.18-fork.3
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -8054,10 +8054,19 @@ const selectedPosts = [];
         if (parsedPosts.filter(p => p.parsedHosts.length).length > 0) {
             const btnDownloadPage = addDownloadPageButton();
 
+            // aggregate every distinct host name across all posts on the
+            // page. Used both for rendering the global host-filter checkboxes
+            // and for reading them back in the click handler. Same string each
+            // place so the IDs line up.
+            const allHostNames = Array.from(new Set(
+                parsedPosts.filter(p => p.parsedHosts.length).flatMap(p => p.parsedHosts.map(h => h.name))
+            )).sort();
+            const hostFilterIdFor = name => `config-page-disable-host-${name.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
             btnDownloadPage.addEventListener('click', e => {
                 e.preventDefault();
 
-                // FORK: read page-level override checkboxes. When set, these
+                // read page-level override checkboxes. When set, these
                 // mutate each post's settings closure before download fires.
                 // Mirrors the per-post Skip-Download toggle's side effects.
                 const pageSkipDownload   = document.querySelector('#config-page-skip-download')?.checked ?? false;
@@ -8065,10 +8074,15 @@ const selectedPosts = [];
                 const pageVerifyBunkr    = document.querySelector('#config-page-verify-bunkr-links')?.checked ?? false;
                 const pageDisableZip     = document.querySelector('#config-page-disable-zip')?.checked ?? false;
 
+                // collect host names the user wants disabled across all posts.
+                const disabledHostNames = new Set(
+                    allHostNames.filter(name => document.querySelector('#' + hostFilterIdFor(name))?.checked)
+                );
+
                 selectedPosts
                     .filter(s => s.enabled)
                     .forEach(s => {
-                    // FORK: apply page-level overrides to this post's settings.
+                    // apply page-level overrides to this post's settings.
                     if (pageSkipDownload || pageSkipDuplicates || pageVerifyBunkr || pageDisableZip) {
                         const ps = s.post.getSettingsCB();
                         if (pageSkipDownload) {
@@ -8085,6 +8099,17 @@ const selectedPosts = [];
                         if (pageDisableZip) {
                             ps.zipped = false;
                         }
+                    }
+                    // disable any host the page filter excluded. Mutates the
+                    // post's parsedHosts so enabledHostsCB (which filters by .enabled)
+                    // skips them. Inverse-toggle: only ever sets enabled=false; never
+                    // re-enables, so per-post toggles already off stay off.
+                    if (disabledHostNames.size > 0) {
+                        s.post.parsedHosts.forEach(host => {
+                            if (disabledHostNames.has(host.name)) {
+                                host.enabled = false;
+                            }
+                        });
                     }
                     downloadPost(
                         s.post.parsedPost,
@@ -8120,7 +8145,7 @@ const selectedPosts = [];
                 html += ui.forms.createCheckbox(`config-download-post-${postId}`, `Post #${postNumber} ${summary}`, false);
             });
 
-            // FORK: page-level override section. These checkboxes get read by
+            // page-level override section. These checkboxes get read by
             // the Download Page click handler above and applied to every
             // selected post's settings. "Disable Zip" is the inverse-toggle
             // form (zipped defaults to true — check this to flip it off).
@@ -8128,7 +8153,18 @@ const selectedPosts = [];
             overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates',   'Skip Duplicates',                     false);
             overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links','Verify Bunkr Links',                  false);
             overrideHtml    += ui.forms.createCheckbox('config-page-disable-zip',       'Disable Zip (plain links.txt output)', false);
-            html = `${ui.forms.createRow(ui.forms.createLabel('Override (applies to all selected)'))} ${overrideHtml} ${ui.forms.createRow(ui.forms.createLabel('Post Selection'))} ${html}`;
+
+            // global host filter — one "Disable <Host>" checkbox per
+            // unique host name detected on the page. Same inverse-toggle
+            // semantic as Disable Zip: check to exclude that host from every
+            // selected post's download.
+            let hostFilterHtml = '';
+            allHostNames.forEach(name => {
+                hostFilterHtml += ui.forms.createCheckbox(hostFilterIdFor(name), `Disable ${name}`, false);
+            });
+            html = `${ui.forms.createRow(ui.forms.createLabel('Override (applies to all selected)'))} ${overrideHtml}`
+                 + (allHostNames.length ? `${ui.forms.createRow(ui.forms.createLabel('Disable hosts globally'))} ${hostFilterHtml}` : '')
+                 + `${ui.forms.createRow(ui.forms.createLabel('Post Selection'))} ${html}`;
             ui.tooltip(btnDownloadPage, ui.forms.config.page.createForm(color, html), {
                 placement: 'bottom',
                 interactive: true,
