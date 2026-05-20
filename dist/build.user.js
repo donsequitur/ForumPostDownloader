@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.1
+// @version 3.18-fork.2
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -8063,12 +8063,13 @@ const selectedPosts = [];
                 const pageSkipDownload   = document.querySelector('#config-page-skip-download')?.checked ?? false;
                 const pageSkipDuplicates = document.querySelector('#config-page-skip-duplicates')?.checked ?? false;
                 const pageVerifyBunkr    = document.querySelector('#config-page-verify-bunkr-links')?.checked ?? false;
+                const pageDisableZip     = document.querySelector('#config-page-disable-zip')?.checked ?? false;
 
                 selectedPosts
                     .filter(s => s.enabled)
                     .forEach(s => {
                     // FORK: apply page-level overrides to this post's settings.
-                    if (pageSkipDownload || pageSkipDuplicates || pageVerifyBunkr) {
+                    if (pageSkipDownload || pageSkipDuplicates || pageVerifyBunkr || pageDisableZip) {
                         const ps = s.post.getSettingsCB();
                         if (pageSkipDownload) {
                             ps.skipDownload   = true;
@@ -8080,6 +8081,9 @@ const selectedPosts = [];
                         }
                         if (pageVerifyBunkr) {
                             ps.verifyBunkrLinks = true;
+                        }
+                        if (pageDisableZip) {
+                            ps.zipped = false;
                         }
                     }
                     downloadPost(
@@ -8118,10 +8122,12 @@ const selectedPosts = [];
 
             // FORK: page-level override section. These checkboxes get read by
             // the Download Page click handler above and applied to every
-            // selected post's settings.
-            let overrideHtml = ui.forms.createCheckbox('config-page-skip-download',   'Skip Download (Generate Links only)', false);
-            overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates', 'Skip Duplicates',                     false);
-            overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links', 'Verify Bunkr Links',               false);
+            // selected post's settings. "Disable Zip" is the inverse-toggle
+            // form (zipped defaults to true — check this to flip it off).
+            let overrideHtml = ui.forms.createCheckbox('config-page-skip-download',     'Skip Download (Generate Links only)', false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates',   'Skip Duplicates',                     false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links','Verify Bunkr Links',                  false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-disable-zip',       'Disable Zip (plain links.txt output)', false);
             html = `${ui.forms.createRow(ui.forms.createLabel('Override (applies to all selected)'))} ${overrideHtml} ${ui.forms.createRow(ui.forms.createLabel('Post Selection'))} ${html}`;
             ui.tooltip(btnDownloadPage, ui.forms.config.page.createForm(color, html), {
                 placement: 'bottom',
