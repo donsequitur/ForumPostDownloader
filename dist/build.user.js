@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.6
+// @version 3.18-fork.7
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -8139,9 +8139,12 @@ const selectedPosts = [];
                     });
                     const final = pageSkipDuplicates ? [...new Set(collected)] : collected;
                     const text = final.join('\n');
-                    const threadTitle = (typeof sanitizeWinSegment === 'function'
-                        ? sanitizeWinSegment(parsers.thread.parseTitle())
-                        : parsers.thread.parseTitle());
+                    // Strip all filesystem path separators + other illegal chars
+                    // — sanitizeWinSegment (when it exists) handles backslash but
+                    // forward slash needs explicit handling too, otherwise titles
+                    // like "Pre-Op / Post-Op" become folders in the download.
+                    const safeFilename = (s) => String(s || '').replace(/[\\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+                    const threadTitle = safeFilename(parsers.thread.parseTitle());
                     const filename = `${threadTitle} - page links.txt`;
                     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
 
