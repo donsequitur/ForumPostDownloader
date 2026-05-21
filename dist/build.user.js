@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.7
+// @version 3.18-fork.8
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -8145,7 +8145,13 @@ const selectedPosts = [];
                     // like "Pre-Op / Post-Op" become folders in the download.
                     const safeFilename = (s) => String(s || '').replace(/[\\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
                     const threadTitle = safeFilename(parsers.thread.parseTitle());
-                    const filename = `${threadTitle} - page links.txt`;
+                    // Pull the current page number from the URL (XenForo pattern:
+                    // /threads/foo.123/page-5). Default to 1 if no /page-N suffix
+                    // (first page of any thread). Avoids filename collisions when
+                    // running Combine output across multiple pages of the same thread.
+                    var pageMatch = window.location.pathname.match(/\/page-(\d+)/);
+                    var pageNum = pageMatch ? pageMatch[1] : '1';
+                    const filename = `${threadTitle} - page-${pageNum} links.txt`;
                     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
 
                     if (window.isFF) {
@@ -8238,12 +8244,15 @@ const selectedPosts = [];
             // the Download Page click handler above and applied to every
             // selected post's settings. "Disable Zip" is the inverse-toggle
             // form (zipped defaults to true — check this to flip it off).
-            let overrideHtml = ui.forms.createCheckbox('config-page-skip-download',     'Skip Download (Generate Links only)', false);
-            overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates',   'Skip Duplicates',                     false);
+            // Default state: all overrides ON except Verify Bunkr Links (slow,
+            // opt-in only) — the typical workflow is "extract URLs to a single
+            // text file for cyberdrop-dl handoff," and these defaults express that.
+            let overrideHtml = ui.forms.createCheckbox('config-page-skip-download',     'Skip Download (Generate Links only)', true);
+            overrideHtml    += ui.forms.createCheckbox('config-page-skip-duplicates',   'Skip Duplicates',                     true);
             overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links','Verify Bunkr Links',                  false);
-            overrideHtml    += ui.forms.createCheckbox('config-page-disable-zip',       'Disable Zip (plain links.txt output)', false);
-            overrideHtml    += ui.forms.createCheckbox('config-page-skip-resolvers',    'Skip Resolvers (emit album/raw URLs)', false);
-            overrideHtml    += ui.forms.createCheckbox('config-page-combine-output',    'Combine output (one links.txt per page)', false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-disable-zip',       'Disable Zip (plain links.txt output)', true);
+            overrideHtml    += ui.forms.createCheckbox('config-page-skip-resolvers',    'Skip Resolvers (emit album/raw URLs)', true);
+            overrideHtml    += ui.forms.createCheckbox('config-page-combine-output',    'Combine output (one links.txt per page)', true);
 
             // global host filter — one "Disable <Host>" checkbox per
             // unique host name detected on the page. Same inverse-toggle
