@@ -5,7 +5,7 @@
 // @author SkyCloudDev
 // @author donsequitur (fork)
 // @description Downloads images and videos from posts. Fork adds page-level override toggles so Skip Download / Generate Links / etc. can be applied to all selected posts at once instead of toggling per-post.
-// @version 3.18-fork.5
+// @version 3.18-fork.6
 // @updateURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @downloadURL https://github.com/donsequitur/ForumPostDownloader/raw/main/dist/build.user.js
 // @icon https://simp4.cuckcapital.cr/simpcityIcon192.png
@@ -8115,11 +8115,52 @@ const selectedPosts = [];
                 const pageVerifyBunkr    = document.querySelector('#config-page-verify-bunkr-links')?.checked ?? false;
                 const pageDisableZip     = document.querySelector('#config-page-disable-zip')?.checked ?? false;
                 const pageSkipResolvers  = document.querySelector('#config-page-skip-resolvers')?.checked ?? false;
+                const pageCombineOutput  = document.querySelector('#config-page-combine-output')?.checked ?? false;
 
                 // collect host names the user wants disabled across all posts.
                 const disabledHostNames = new Set(
                     allHostNames.filter(name => document.querySelector('#' + hostFilterIdFor(name))?.checked)
                 );
+
+                // Combined-output fast path: aggregate raw URLs across all
+                // selected posts into ONE links.txt instead of one-per-post.
+                // Bypasses downloadPost entirely. Requires Skip Download (we're
+                // emitting URLs, not files) and reads from host.resources
+                // directly (skip-resolvers semantics). Honors the global host
+                // filter and Skip Duplicates.
+                if (pageCombineOutput && pageSkipDownload) {
+                    const collected = [];
+                    selectedPosts.filter(s => s.enabled).forEach(s => {
+                        s.post.parsedHosts.forEach(host => {
+                            if (!host.enabled) return;
+                            if (disabledHostNames.has(host.name)) return;
+                            host.resources.forEach(r => { if (r) collected.push(r); });
+                        });
+                    });
+                    const final = pageSkipDuplicates ? [...new Set(collected)] : collected;
+                    const text = final.join('\n');
+                    const threadTitle = (typeof sanitizeWinSegment === 'function'
+                        ? sanitizeWinSegment(parsers.thread.parseTitle())
+                        : parsers.thread.parseTitle());
+                    const filename = `${threadTitle} - page links.txt`;
+                    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+
+                    if (window.isFF) {
+                        saveAs(blob, filename);
+                    } else {
+                        const url = URL.createObjectURL(blob);
+                        GM_download({
+                            url,
+                            name: filename,
+                            onload: () => { try { URL.revokeObjectURL(url); } catch (e) {} },
+                            onerror: () => {
+                                try { URL.revokeObjectURL(url); } catch (e) {}
+                                try { saveAs(blob, filename); } catch (e) {}
+                            },
+                        });
+                    }
+                    return; // skip per-post loop entirely
+                }
 
                 selectedPosts
                     .filter(s => s.enabled)
@@ -8199,6 +8240,7 @@ const selectedPosts = [];
             overrideHtml    += ui.forms.createCheckbox('config-page-verify-bunkr-links','Verify Bunkr Links',                  false);
             overrideHtml    += ui.forms.createCheckbox('config-page-disable-zip',       'Disable Zip (plain links.txt output)', false);
             overrideHtml    += ui.forms.createCheckbox('config-page-skip-resolvers',    'Skip Resolvers (emit album/raw URLs)', false);
+            overrideHtml    += ui.forms.createCheckbox('config-page-combine-output',    'Combine output (one links.txt per page)', false);
 
             // global host filter — one "Disable <Host>" checkbox per
             // unique host name detected on the page. Same inverse-toggle
